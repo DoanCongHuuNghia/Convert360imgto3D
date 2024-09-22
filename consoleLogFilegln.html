@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GLB Model Console Log</title>
+    <style>
+      body { margin: 0; }
+    </style>
+  </head>
+  <body>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.rawgit.com/mrdoob/three.js/r128/examples/js/loaders/GLTFLoader.js"></script>
+
+    <script>
+      // Khởi tạo scene và camera
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+      const renderer = new THREE.WebGLRenderer();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      document.body.appendChild(renderer.domElement);
+
+      // Load file GLB
+      const loader = new THREE.GLTFLoader();
+      loader.load(
+        '../living_room_model.glb', // Đường dẫn tới file GLB của bạn
+        function (gltf) {
+          // In nội dung file GLB ra console
+          console.log('GLTF Model Loaded:', gltf);
+          console.log('Scene:', gltf.scene);
+          
+          // Thêm mô hình vào scene
+          scene.add(gltf.scene);
+
+          // Bạn có thể in từng phần khác của file GLB
+          console.log('Meshes:', gltf.scene.children);
+          console.log('Animations:', gltf.animations);
+          console.log('Materials:', gltf.scene.children.map(child => child.material));
+        },
+        undefined,
+        function (error) {
+          console.error('An error occurred while loading the GLB model:', error);
+        }
+      );
+
+      camera.position.z = 5;
+      function animate() {
+        requestAnimationFrame(animate);
+        renderer.render(scene, camera);
+      }
+      animate();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Equirectangular to Cube Map with GLB Export</title>
+  <style>
+    body { margin: 0; }
+    canvas { display: block; }
+    #exportButton {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      padding: 10px 20px;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <button id="exportButton">Export GLB</button>
+
+  <script type="module">
+    import * as THREE from 'https://unpkg.com/three@0.152.2/build/three.module.js';
+    import { OrbitControls } from 'https://unpkg.com/three@0.152.2/examples/jsm/controls/OrbitControls.js';
+    import { GLTFExporter } from 'https://unpkg.com/three@0.152.2/examples/jsm/exporters/GLTFExporter.js';
+
+    let scene, camera, renderer, controls, cube;
+
+    function init() {
+      // Create the scene
+      scene = new THREE.Scene();
+
+      // Set up the camera
+      camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+      camera.position.z = 1;
+
+      // Set up the renderer
+      renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      document.body.appendChild(renderer.domElement);
+
+      // OrbitControls for navigating the scene
+      controls = new OrbitControls(camera, renderer.domElement);
+
+      // Load the equirectangular texture
+      const textureLoader = new THREE.TextureLoader();
+      const equirectangularTexture = textureLoader.load('path/to/your/equirectangular_image.jpg', (texture) => {
+        
+        // Convert equirectangular texture to cubemap
+        const pmremGenerator = new THREE.PMREMGenerator(renderer);
+        const cubeMapTexture = pmremGenerator.fromEquirectangular(texture).texture;
+        pmremGenerator.dispose();  // Free up memory
+
+        // Create a cube and apply the cube map as its environment map
+        const geometry = new THREE.BoxGeometry(500, 500, 500);
+        const material = new THREE.MeshBasicMaterial({
+          envMap: cubeMapTexture,  // Use the cube map texture for reflections
+          side: THREE.BackSide     // Render the inside of the cube
+        });
+
+        cube = new THREE.Mesh(geometry, material);
+        scene.add(cube);  // Add cube to the scene
+      });
+
+      // Add export button functionality
+      document.getElementById('exportButton').addEventListener('click', exportGLB);
+
+      // Animate the scene
+      animate();
+    }
+
+    // Export the scene as GLB
+    function exportGLB() {
+      const exporter = new GLTFExporter();
+      
+      exporter.parse(scene, (gltf) => {
+        const blob = new Blob([gltf], { type: 'model/gltf-binary' });
+        saveBlob(blob, 'scene.glb');
+      }, { binary: true });
+    }
+
+    // Helper function to save the blob as a file
+    function saveBlob(blob, filename) {
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = filename;
+      link.click();
+    }
+
+    // Animation loop
+    function animate() {
+      requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    // Handle window resizing
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // Initialize the scene
+    init();
+  </script>
+</body>
+</html>

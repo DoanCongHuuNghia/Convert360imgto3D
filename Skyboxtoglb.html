@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Update GLB with Skybox</title>
+</head>
+<body>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/exporters/GLTFExporter.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+
+  <script>
+    // Khởi tạo scene, camera và renderer
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    camera.position.z = 5;
+
+    // Tạo OrbitControls để điều khiển camera bằng chuột
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.25;
+    controls.rotateSpeed = 0.1;
+
+    // Load GLB và xóa các vật thể có type là 3DObject
+    const gltfLoader = new THREE.GLTFLoader();
+    gltfLoader.load('../living_room_model.glb', (gltf) => {
+      const model = gltf.scene;
+
+      // Xóa các vật thể có type là 3DObject
+      model.traverse((child) => {
+        if (child.isMesh && child.type === '3DObject') {
+          scene.remove(child);
+        }
+      });
+
+      // Load textures cho các bức tường
+      const textureLoader = new THREE.TextureLoader();
+      const wallTextures = {
+        wallX1: '../images/wallX1.jpg', // Texture cho WallX1
+        wallX2: '../images/wallX2.jpg', // Texture cho WallX2
+        wallZ1: '../images/wallZ1.jpg', // Texture cho WallZ1
+        wallZ2: '../images/wallZ2.jpg', // Texture cho WallZ2 (tạo mới)
+      };
+
+      // Tạo các bức tường mới và ánh xạ texture
+      const createWall = (name, position, rotation, scale, textureUrl) => {
+        return new Promise((resolve) => {
+          textureLoader.load(textureUrl, (texture) => {
+            const geometry = new THREE.BoxGeometry();
+            const material = new THREE.MeshBasicMaterial({ map: texture });
+            const wall = new THREE.Mesh(geometry, material);
+            wall.name = name;
+            wall.position.set(...position);
+            wall.rotation.set(...rotation.map(deg => THREE.MathUtils.degToRad(deg)));
+            wall.scale.set(...scale);
+            scene.add(wall);
+            resolve();
+          });
+        });
+      };
+
+      // Tạo bức tường WallX1, WallX2, WallZ1 và WallZ2
+      Promise.all([
+        createWall('WallX1', [-3.115, 1.510, 0.290], [0.00, 90.00, 0.00], [8.514, 2.926, 1.000], wallTextures.wallX1),
+        createWall('WallX2', [2.550, 1.510, 0.000], [0.00, 90.00, 0.00], [9.114, 2.931, 1.000], wallTextures.wallX2),
+        createWall('WallZ1', [-0.262, 1.510, 4.550], [-180.00, 0.00, 180.00], [5.665, 2.927, 6.403], wallTextures.wallZ1),
+        createWall('WallZ2', [-0.282, 1.510, -3.960], [180.00, 0.00, 180.00], [5.665, 2.927, 6.403], wallTextures.wallZ2),
+      ]).then(() => {
+        // Xuất file GLB mới
+        const exporter = new THREE.GLTFExporter();
+        exporter.parse(scene, (result) => {
+          const blob = new Blob([JSON.stringify(result)], { type: 'application/octet-stream' });
+          saveAs(blob, 'updated_model.glb'); // Sử dụng FileSaver.js để lưu file
+        });
+      });
+
+    }, undefined, (error) => {
+      console.error('Error loading GLB:', error);
+    });
+
+    // Hàm render scene
+    function animate() {
+      requestAnimationFrame(animate);
+      controls.update(); // Cập nhật điều khiển mỗi frame
+      renderer.render(scene, camera);
+    }
+
+    animate();
+
+    // Cập nhật kích thước renderer khi thay đổi kích thước trình duyệt
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>

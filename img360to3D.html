@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>360 Image Cube Map</title>
+    <style>
+      body {
+        margin: 0;
+      }
+      canvas {
+        display: block;
+      }
+    </style>
+    <!-- Load Three.js and OrbitControls -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/exporters/GLTFExporter.js"></script>
+  </head>
+  <body>
+    <script>
+      // Function to apply the transformation directly to images
+      function convertFace(imgIn, faceIdx, faceSize) {
+        var inPix = shimImgData(imgIn),
+          faceCanvas = document.createElement("canvas"),
+          faceCtx = faceCanvas.getContext("2d"),
+          faceImgData = faceCtx.createImageData(faceSize, faceSize),
+          outPix = shimImgData(faceImgData),
+          pi = Math.PI,
+          pi_2 = pi / 2;
+
+        faceCanvas.width = faceSize;
+        faceCanvas.height = faceSize;
+
+        for (var xOut = 0; xOut < faceSize; xOut++) {
+          for (var yOut = 0; yOut < faceSize; yOut++) {
+            var xyz = outImgToXYZ(xOut, yOut, faceIdx, faceSize);
+            var theta = Math.atan2(xyz.y, xyz.x); // range -pi to pi
+            var r = Math.hypot(xyz.x, xyz.y);
+            var phi = Math.atan2(xyz.z, r); // range -pi/2 to pi/2
+
+            // source image coordinates
+            var uf = (0.5 * imgIn.width * (theta + pi)) / pi;
+            var vf = (0.5 * imgIn.width * (pi_2 - phi)) / pi;
+
+            // Bilinear interpolation
+            var ui = Math.floor(uf);
+            var vi = Math.floor(vf);
+            var u2 = ui + 1;
+            var v2 = vi + 1;
+            var mu = uf - ui;
+            var nu = vf - vi;
+
+            // Pixel values of four corners
+            var A = inPix.getPx(
+              ui % imgIn.width,
+              clip(vi, 0, imgIn.height - 1)
+            );
+            var B = inPix.getPx(
+              u2 % imgIn.width,
+              clip(vi, 0, imgIn.height - 1)
+            );
+            var C = inPix.getPx(
+              ui % imgIn.width,
+              clip(v2, 0, imgIn.height - 1)
+            );
+            var D = inPix.getPx(
+              u2 % imgIn.width,
+              clip(v2, 0, imgIn.height - 1)
+            );
+
+            // Interpolation
+            var rgb = {
+              r:
+                A[0] * (1 - mu) * (1 - nu) +
+                B[0] * mu * (1 - nu) +
+                C[0] * (1 - mu) * nu +
+                D[0] * mu * nu,
+              g:
+                A[1] * (1 - mu) * (1 - nu) +
+                B[1] * mu * (1 - nu) +
+                C[1] * (1 - mu) * nu +
+                D[1] * mu * nu,
+              b:
+                A[2] * (1 - mu) * (1 - nu) +
+                B[2] * mu * (1 - nu) +
+                C[2] * (1 - mu) * nu +
+                D[2] * mu * nu,
+            };
+
+            rgb.r = Math.round(rgb.r);
+            rgb.g = Math.round(rgb.g);
+            rgb.b = Math.round(rgb.b);
+
+            outPix.setPx(xOut, yOut, rgb);
+          }
+        }
+
+        faceCtx.putImageData(faceImgData, 0, 0);
+        return faceCanvas;
+      }
+
+      // Convert output image pixel to XYZ coordinates
+      function outImgToXYZ(i, j, faceIdx, faceSize) {
+        var a = (2 * i) / faceSize,
+          b = (2 * j) / faceSize;
+
+        switch (faceIdx) {
+          case 0:
+            return { x: 1 - a, y: 1, z: 1 - b }; // left
+          case 1:
+            return { x: a - 1, y: -1, z: 1 - b }; // right
+          case 2:
+            return { x: b - 1, y: a - 1, z: 1 }; // top
+          case 3:
+            return { x: 1 - b, y: a - 1, z: -1 }; // bottom
+          case 4:
+            return { x: 1, y: a - 1, z: 1 - b }; // front
+          case 5:
+            return { x: -1, y: 1 - a, z: 1 - b }; // back
+        }
+      }
+
+      // Helper function to get and set pixel data
+      function shimImgData(imgData) {
+        var w = imgData.width * 4,
+          d = imgData.data;
+
+        return {
+          getPx: function (x, y) {
+            x = x * 4 + y * w;
+            return [d[x], d[x + 1], d[x + 2]];
+          },
+          setPx: function (x, y, rgb) {
+            x = x * 4 + y * w;
+            d[x] = rgb.r;
+            d[x + 1] = rgb.g;
+            d[x + 2] = rgb.b;
+            d[x + 3] = 255; // alpha
+          },
+        };
+      }
+
+      // Clipping helper function
+      function clip(val, min, max) {
+        return val < min ? min : val > max ? max : val;
+      }
+
+      // Main function to load a 360 image and display it on a cube map
+      function load360ImageAndDisplayOnCube(url) {
+        var img = new Image();
+        img.crossOrigin = "anonymous"; // To handle cross-origin image loading
+        img.onload = function () {
+          var canvas = document.createElement("canvas");
+          var ctx = canvas.getContext("2d");
+          canvas.width = img.width;
+          canvas.height = img.height;
+          ctx.drawImage(img, 0, 0);
+
+          var imgData = ctx.getImageData(0, 0, img.width, img.height);
+          var faceSize = 512; // You can adjust this for the cube face size
+
+          // Create six canvas elements for each face of the cube
+          var faces = [];
+          for (let i = 0; i < 6; i++) {
+            faces.push(convertFace(imgData, i, faceSize));
+          }
+
+          // Load the six textures into Three.js
+          const scene = new THREE.Scene();
+          const camera = new THREE.PerspectiveCamera(
+            75,
+            window.innerWidth / window.innerHeight,
+            0.1,
+            1000
+          );
+          const renderer = new THREE.WebGLRenderer();
+          renderer.setSize(window.innerWidth, window.innerHeight);
+          document.body.appendChild(renderer.domElement);
+
+          const geometry = new THREE.BoxGeometry(50, 50, 50);
+          const materials = faces.map((faceCanvas) => {
+            const texture = new THREE.CanvasTexture(faceCanvas);
+            return new THREE.MeshBasicMaterial({
+              map: texture,
+              side: THREE.BackSide,
+            });
+          });
+
+          const cube = new THREE.Mesh(geometry, materials);
+          scene.add(cube);
+
+          console.log(cube);
+          console.log(scene);
+          
+          
+
+          camera.position.z = 2;
+
+          // Set up OrbitControls to allow camera rotation and zoom
+          const controls = new THREE.OrbitControls(camera, renderer.domElement);
+
+          // Exporter
+          const exporter = new THREE.GLTFExporter();
+
+          // Function to export the scene to GLB
+          function exportGLB() {
+            exporter.parse(
+              scene,
+              function (result) {
+                const blob = new Blob([result], {
+                  type: "application/octet-stream",
+                });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = "scene.glb";
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+              },
+              { binary: true }
+            );
+          }
+
+          // Listen for the "E" key press
+          window.addEventListener("keydown", (event) => {
+            if (event.key === "e" || event.key === "E") {
+              exportGLB();
+            }
+          });
+
+          function animate() {
+            requestAnimationFrame(animate);
+            controls.update(); // Update the controls
+            renderer.render(scene, camera);
+          }
+
+          animate();
+        };
+
+        img.src = url; // Load your 360 image URL here
+      }
+
+      // Example usage with a 360 image URL
+      load360ImageAndDisplayOnCube("/images/360-living-room.jpg");
+    </script>
+  </body>
+</html>
